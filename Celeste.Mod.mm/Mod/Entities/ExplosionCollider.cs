@@ -15,12 +15,12 @@ public class ExplosionCollider : Component {
     /// The first argument is the entity triggering the explosion, and the second argument is the position of the center of the explosion.
     /// </summary>
     public Action<Entity, Vector2> OnCollide;
-    
+
     /// <summary>
     /// If not null, used instead of this component's entity's collider for colliding with explosions.
     /// </summary>
     public Collider Collider;
-    
+
     /// <summary>
     /// Creates a new <see cref="ExplosionCollider"/>.
     /// </summary>
@@ -30,7 +30,7 @@ public class ExplosionCollider : Component {
         OnCollide = onCollide;
         Collider = collider;
     }
-    
+
     private bool Check(Entity other) {
         Collider entityCollider = Entity.Collider;
         if (Collider != null) {
@@ -38,12 +38,12 @@ public class ExplosionCollider : Component {
         }
 
         bool result = other.CollideCheck(Entity);
-            
+
         Entity.Collider = entityCollider;
-            
+
         return result;
     }
-    
+
     public override void DebugRender(Camera camera) {
         if (Collider != null) {
             Collider entityCollider = Entity.Collider;
@@ -55,6 +55,7 @@ public class ExplosionCollider : Component {
 
     /// <summary>
     /// Triggers all <see cref="ExplosionCollider"/>s currently colliding with the specified entity.
+    /// (Does not launch Players or TheoCrystals.)
     /// </summary>
     /// <param name="entity">The entity triggering the explosion.</param>
     public static void TriggerExplosionColliders(Entity entity) {
@@ -64,7 +65,7 @@ public class ExplosionCollider : Component {
             .Cast<ExplosionCollider>()
             .Where(c => c.OnCollide != null && c.Check(entity))
             .ToArray();
-        
+
         foreach (ExplosionCollider explosionCollider in collidingExplosionColliders) {
             explosionCollider.OnCollide(entity, entity.Center);
         }
