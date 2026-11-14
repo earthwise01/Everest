@@ -2,9 +2,14 @@
 #pragma warning disable CS0649 // Field is never assigned to, and will always have its default value null
 
 using Celeste.Mod;
+using Celeste.Mod.Entities;
 using Microsoft.Xna.Framework;
+using Mono.Cecil;
 using Monocle;
 using MonoMod;
+using MonoMod.Cil;
+using MonoMod.InlineRT;
+using MonoMod.Utils;
 using System;
 using System.Collections;
 
@@ -54,6 +59,10 @@ namespace Celeste {
         public int AddState(string name, Func<Seeker, int> onUpdate, Func<Seeker, IEnumerator> coroutine = null, Action<Seeker> begin = null, Action<Seeker> end = null){
             return ((patch_StateMachine)State).AddState(name, onUpdate, coroutine, begin, end);
         }
+
+        [MonoModIgnore] // We don't want to change anything about the method...
+        [PatchSeekerRegenerateCoroutine] // ... except for manually manipulating the method via MonoModRules
+        private extern IEnumerator RegenerateCoroutine();
     }
 }
 
@@ -68,6 +77,39 @@ namespace Celeste.Mod {
                 internal static void RegisterStates(_Seeker seeker)
                     => OnRegisterStates?.Invoke(seeker);
             }
+        }
+    }
+}
+
+namespace MonoMod {
+    /// <summary>
+    /// Patch seeker regenerate explosions to handle explosion interactions with <see cref="ExplosionCollider"/> components.
+    /// </summary>
+    [MonoModCustomMethodAttribute(nameof(MonoModRules.PatchSeekerRegenerateCoroutine))]
+    class PatchSeekerRegenerateCoroutineAttribute : Attribute { }
+
+    static partial class MonoModRules {
+        public static void PatchSeekerRegenerateCoroutine(MethodDefinition method, CustomAttribute attrib) {
+            MethodDefinition routine = method.GetEnumeratorMoveNext();
+
+            new ILContext(routine).Invoke(ctx => {
+                TypeDefinition t_ExplosionCollider = MonoModRule.Modder.Module.GetType("Celeste.Mod.Entities.ExplosionCollider");
+                MethodDefinition m_ExplosionCollider_TriggerExplosionColliders = t_ExplosionCollider.FindMethod("System.Void TriggerExplosionColliders(Monocle.Entity)");
+                
+                ILCursor cursor = new(ctx);
+                
+                // jump to just before the collider is reset to normal
+                cursor.GotoNext(MoveType.Before,
+                    instr => instr.MatchLdloc1(),
+                    instr => instr.MatchLdloc1(),
+                    instr => instr.MatchLdfld("Celeste.Seeker", "physicsHitbox"),
+                    instr => instr.MatchCallvirt("Monocle.Entity", "set_Collider"));
+                cursor.MoveAfterLabels();
+
+                // inject call to ExplosionCollider.TriggerExplosionColliders
+                cursor.EmitLdloc1();
+                cursor.EmitCall(m_ExplosionCollider_TriggerExplosionColliders);
+            });
         }
     }
 }
